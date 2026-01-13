@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>客戶拜訪追蹤系統</title>
+  <style>
+    :root{
+      --bg:#eaf2ff; --card:#fff; --text:#111827; --muted:#6b7280; --line:#e5e7eb;
+      --btn:#111827; --btnText:#fff; --btn2:#ffffff;
+      --danger:#b91c1c; --ok:#047857;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family: system-ui, -apple-system, "Microsoft JhengHei", "Noto Sans TC", Arial; background:var(--bg); color:var(--text);}
+    .wrap{max-width:1280px;margin:18px auto;padding:0 14px;}
+    .topbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap}
+    h1{font-size:20px;margin:0}
+    .hint{font-size:12px;color:var(--muted);line-height:1.35}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);margin-bottom:12px;}
+    .row{display:grid;gap:10px;margin-bottom:10px}
+    .row.cols-6{grid-template-columns:repeat(6,1fr)}
+    .row.cols-5{grid-template-columns:repeat(5,1fr)}
+    .row.cols-4{grid-template-columns:repeat(4,1fr)}
+    .row.cols-3{grid-template-columns:repeat(3,1fr)}
+    .row.cols-2{grid-template-columns:repeat(2,1fr)}
+    .field label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px 2px}
+    input, select, textarea{
+      width:100%; padding:10px 10px; border:1px solid var(--line); border-radius:10px; font-size:14px; background:#fff;
+      outline:none;
+    }
+    input:focus, select:focus, textarea:focus{border-color:#9ca3af; box-shadow:0 0 0 3px rgba(156,163,175,.25)}
+    textarea{min-height:120px; resize:vertical}
+    textarea.big{min-height:170px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    button{
+      border:1px solid var(--btn); background:var(--btn); color:var(--btnText); padding:10px 12px; border-radius:10px;
+      font-size:14px; cursor:pointer;
+    }
+    button.secondary{background:var(--btn2); color:var(--text); border:1px solid var(--line)}
+    button.danger{background:#fff; color:var(--danger); border:1px solid #fecaca}
+    button:disabled{opacity:.55; cursor:not-allowed}
+    .split{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    .pill{display:inline-flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
+    .pill b{color:var(--text)}
+    .tableWrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
+    table{width:100%;border-collapse:collapse;min-width:1200px}
+    th, td{border-bottom:1px solid var(--line);padding:10px 8px;font-size:13px;vertical-align:top}
+    th{position:sticky;top:0;background:#f9fafb;z-index:1;text-align:left}
+    tr:hover td{background:#fcfcfd}
+    .right{display:flex;gap:8px;justify-content:flex-end}
+    .nowrap{white-space:nowrap}
+    .status{font-size:12px;color:var(--muted)}
+    .status.ok{color:var(--ok)}
+    .status.err{color:var(--danger)}
+    @media (max-width: 1100px){
+      .row.cols-6{grid-template-columns:repeat(3,1fr)}
+      .row.cols-5{grid-template-columns:repeat(3,1fr)}
+    }
+    @media (max-width: 720px){
+      .row.cols-6,.row.cols-5,.row.cols-4{grid-template-columns:repeat(2,1fr)}
+      .row.cols-3,.row.cols-2{grid-template-columns:repeat(1,1fr)}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>客戶拜訪追蹤系統</h1>
+      <div class="hint">
+        ・表單依你附檔欄位順序（共 23 欄）重做為 <b>四列分區＋大格子</b>。<br/>
+        ・「拜訪內容紀錄」「追蹤紀錄」可直接按 Enter 換行。資料存在本機瀏覽器（離線可用）。<br/>
+        ・CSV 匯入：同主鍵「拜訪日期＋業務＋客戶名」→ 更新；不存在 → 新增。
+      </div>
+    </div>
+    <div class="pill"><span>目前筆數：</span><b id="countAll">0</b><span>｜篩選後：</span><b id="countFiltered">0</b></div>
+  </div>
+
+  <div class="card">
+    <div class="split">
+      <b class="nowrap">CSV 匯入 / 匯出</b>
+      <div class="actions">
+        <button class="secondary" id="btnExportNew">匯出 CSV（新檔）</button>
+        <button class="secondary" id="btnExportOverwrite" disabled>匯出 CSV（覆蓋原檔名）</button>
+        <input type="file" id="fileImport" accept=".csv,text/csv" style="display:none"/>
+        <button class="secondary" id="btnImport">匯入 CSV（新增/更新）</button>
+      </div>
+    </div>
+    
+
+  <div class="card">
+    <div class="split">
+      <b class="nowrap">查詢 / 篩選</b>
+      <div class="actions">
+        <button class="secondary" id="btnClearFilter">清除查詢</button>
+        <button class="secondary" id="btnClearAll">清空所有資料</button>
+      </div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="row cols-6">
+      <div class="field"><label>拜訪日期（起）</label><input type="date" id="qDateStart"></div>
+      <div class="field"><label>拜訪日期（迄）</label><input type="date" id="qDateEnd"></div>
+      <div class="field"><label>業務</label><input id="qSales" placeholder="例如：柏鈞"></div>
+      <div class="field"><label>客戶名</label><input id="qCustomer" placeholder="關鍵字包含"></div>
+      <div class="field"><label>區域 / 地區</label><input id="qRegion" placeholder="例如：台中大雅"></div>
+      <div class="field"><label>全文關鍵字（選用）</label><input id="qAny" placeholder="可查全部欄位"></div>
+    </div>
+    <div class="status" id="filterStatus">可用：日期區間、業務、客戶名、區域（地區）查詢；匯入後也可查。</div>
+  </div>
+
+  <div class="card">
+    <div class="split">
+      <b class="nowrap">新增 / 編輯（四列分區）</b>
+      <div class="actions">
+        <button id="btnSave">儲存</button>
+        <button class="secondary" id="btnNew">新增一筆</button>
+        <button class="danger" id="btnDelete" disabled>刪除此筆</button>
+      </div>
+    </div>
+    <div class="status" id="editStatus">目前模式：新增</div>
+    <div style="height:10px"></div>
+
+    <div class="row cols-6">
+      <div class="field"><label>拜訪日期</label><input type="date" id="f_visit_date"></div>
+      <div class="field"><label>業務</label><input id="f_sales"></div>
+      <div class="field"><label>客戶別</label>
+        <select id="f_customer_type">
+          <option value=""></option>
+          <option value="樣品客戶">樣品客戶</option>
+          <option value="量產客戶">量產客戶</option>
+          <option value="潛在客戶">潛在客戶</option>
+        </select>
+      </div>
+      <div class="field"><label>客戶名</label><input id="f_customer_name"></div>
+      <div class="field"><label>區域</label><input id="f_region"></div>
+      <div class="field"><label>接洽人</label><input id="f_contact"></div>
+    </div>
+    <div class="row cols-3">
+      <div class="field"><label>部門</label><input id="f_dept"></div>
+      <div class="field"><label>產業別</label><input id="f_industry"></div>
+      <div class="field"><label>上下游廠商</label><input id="f_supply_chain"></div>
+    </div>
+
+    <div class="row cols-4">
+      <div class="field"><label>現有表面處理</label><input id="f_surface"></div>
+      <div class="field"><label>現有廠商</label><input id="f_current_vendor"></div>
+      <div class="field"><label>目前是否在九井量產</label>
+        <select id="f_in_mass">
+          <option value=""></option>
+          <option value="是">是</option>
+          <option value="否">否</option>
+        </select>
+      </div>
+      <div class="field"><label>量產品預估量/月</label><input id="f_mass_qty" placeholder="例如：5000 pcs / 2 ton"></div>
+    </div>
+
+    <div class="row cols-2">
+      <div class="field"><label>拜訪內容紀錄（可 Enter 換行）</label><textarea class="big" id="f_visit_notes"></textarea></div>
+      <div class="field"><label>追蹤紀錄（可 Enter 換行）</label><textarea class="big" id="f_follow_notes"></textarea></div>
+    </div>
+
+    <div class="row cols-5">
+      <div class="field"><label>是否有新樣品試作</label>
+        <select id="f_has_sample">
+          <option value=""></option>
+          <option value="是">是</option>
+          <option value="否">否</option>
+        </select>
+      </div>
+      <div class="field"><label>樣品品名</label><input id="f_sample_name"></div>
+      <div class="field"><label>樣品材質</label><input id="f_sample_material"></div>
+      <div class="field"><label>硬度</label><input id="f_hardness"></div>
+      <div class="field"><label>化合層</label><input id="f_compound"></div>
+    </div>
+
+    <div class="row cols-4">
+      <div class="field"><label>預估數量/月</label><input id="f_est_qty"></div>
+      <div class="field"><label>預估何時會下單</label><input id="f_est_order_time" placeholder="例如：2月 / Q2 / 3週內"></div>
+      <div class="field"><label>品質/服務是否滿意</label>
+        <select id="f_satisfaction">
+          <option value=""></option>
+          <option value="是">是</option>
+          <option value="否">否</option>
+          <option value="普通">普通</option>
+        </select>
+      </div>
+      <div class="field"><label>（保留）</label><input disabled value="欄位順序已對齊附檔"></div>
+    </div>
+
+    <div class="status ok" id="saveStatus" style="display:none"></div>
+    <div class="status err" id="errStatus" style="display:none"></div>
+  </div>
+<div class="status" id="importStatus">提示：本系統匯出已自動加 BOM，Excel 直接開不會亂碼。｜上次匯入檔名：<b id="lastImportName">（尚未匯入）</b></div>
+  </div>
+
+  <div class="card">
+    <div class="split">
+      <b class="nowrap">資料清單</b>
+      <div class="actions">
+        
+      <div class="actions">
+        <span class="pill">每頁顯示：<b id="pageSizeLabel">20</b> 筆</span>
+        <button class="secondary" id="btnPrevPage">上一頁</button>
+        <button class="secondary" id="btnNextPage">下一頁</button>
+        <span class="pill">第 <b id="pageNow">1</b> / <b id="pageTotal">1</b> 頁</span>
+      </div>
+<button class="secondary" id="btnLoadSample">載入附檔示例（9筆）</button>
+      </div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="nowrap">操作</th>
+            <th class="nowrap">拜訪日期</th>
+            <th class="nowrap">業務</th>
+            <th>客戶名</th>
+            <th class="nowrap">區域</th>
+            <th class="nowrap">客戶別</th>
+            <th>接洽人</th>
+            <th>產業別</th>
+            <th>目前在九井量產</th>
+            <th>量產品預估量/月</th>
+            <th>是否有新樣品試作</th>
+            <th>預估何時會下單</th>
+            <th>品質/服務是否滿意</th>
+            <th>拜訪內容紀錄</th>
+            <th>追蹤紀錄</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const FIELDS = [
+  "拜訪日期","業務","客戶別","客戶名","區域","接洽人","部門","產業別","上下游廠商","現有表面處理","現有廠商",
+  "目前是否在九井量產","量產品預估量/月","拜訪內容紀錄","是否有新樣品試作","樣品品名","樣品材質",
+  "硬度","化合層","預估數量/月","預估何時會下單","品質/服務是否滿意","追蹤紀錄"
+];
+const STORE_KEY = "nwc_visit_tracking_v1";
+let records = [];
+let editingId = null;
+let pageSize = 20;
+let currentPage = 1;
+let lastImportFilename = "";
+
+const $ = (id)=>document.getElementById(id);
+const show = (el, yes=true)=>{ el.style.display = yes ? "" : "none"; };
+const esc = (s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+
+function nowISODate(){
+  const d = new Date();
+  const pad=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function normalizeDate(input){
+  const s = String(input??"").trim();
+  if(!s) return "";
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
+  if(m){
+    let mm = parseInt(m[1],10);
+    let dd = parseInt(m[2],10);
+    let yy = m[3] ? parseInt(m[3],10) : new Date().getFullYear();
+    if(yy<100) yy = 2000+yy;
+    const pad=n=>String(n).padStart(2,"0");
+    if(mm>=1 && mm<=12 && dd>=1 && dd<=31){
+      return `${yy}-${pad(mm)}-${pad(dd)}`;
+    }
+  }
+  const d = new Date(s);
+  if(!isNaN(d.getTime())){
+    const pad=n=>String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+  return s;
+}
+
+function makeKey(r){
+  return [normalizeDate(r["拜訪日期"]), String(r["業務"]??"").trim(), String(r["客戶名"]??"").trim()].join("||");
+}
+function uuid(){ return "r_" + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+function load(){
+  try{ records = JSON.parse(localStorage.getItem(STORE_KEY) || "[]"); }
+  catch(e){ records = []; }
+}
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(records)); }
+
+function setStatus(okMsg="", errMsg=""){
+  const ok = $("saveStatus"), err = $("errStatus");
+  if(okMsg){ ok.textContent = okMsg; ok.className="status ok"; show(ok,true); } else show(ok,false);
+  if(errMsg){ err.textContent = errMsg; err.className="status err"; show(err,true); } else show(err,false);
+}
+
+function clearForm(){
+  editingId = null;
+  $("btnDelete").disabled = true;
+  $("editStatus").textContent = "目前模式：新增";
+  $("f_visit_date").value = nowISODate();
+  ["f_sales","f_customer_name","f_region","f_contact","f_dept","f_industry","f_supply_chain","f_surface","f_current_vendor",
+   "f_mass_qty","f_sample_name","f_sample_material","f_hardness","f_compound","f_est_qty","f_est_order_time"
+  ].forEach(id=>$(id).value="");
+  ["f_customer_type","f_in_mass","f_has_sample","f_satisfaction"].forEach(id=>$(id).value="");
+  $("f_visit_notes").value = "";
+  $("f_follow_notes").value = "";
+  setStatus();
+}
+
+function formToRecord(){
+  return {
+    "拜訪日期": $("f_visit_date").value || "",
+    "業務": $("f_sales").value || "",
+    "客戶別": $("f_customer_type").value || "",
+    "客戶名": $("f_customer_name").value || "",
+    "區域": $("f_region").value || "",
+    "接洽人": $("f_contact").value || "",
+    "部門": $("f_dept").value || "",
+    "產業別": $("f_industry").value || "",
+    "上下游廠商": $("f_supply_chain").value || "",
+    "現有表面處理": $("f_surface").value || "",
+    "現有廠商": $("f_current_vendor").value || "",
+    "目前是否在九井量產": $("f_in_mass").value || "",
+    "量產品預估量/月": $("f_mass_qty").value || "",
+    "拜訪內容紀錄": $("f_visit_notes").value || "",
+    "是否有新樣品試作": $("f_has_sample").value || "",
+    "樣品品名": $("f_sample_name").value || "",
+    "樣品材質": $("f_sample_material").value || "",
+    "硬度": $("f_hardness").value || "",
+    "化合層": $("f_compound").value || "",
+    "預估數量/月": $("f_est_qty").value || "",
+    "預估何時會下單": $("f_est_order_time").value || "",
+    "品質/服務是否滿意": $("f_satisfaction").value || "",
+    "追蹤紀錄": $("f_follow_notes").value || ""
+  };
+}
+function validateRecord(r){
+  if(!r["拜訪日期"]) return "請選擇拜訪日期";
+  if(!r["業務"].trim()) return "請填寫業務";
+  if(!r["客戶名"].trim()) return "請填寫客戶名";
+  return "";
+}
+
+function upsertRecord(r){
+  r["拜訪日期"] = normalizeDate(r["拜訪日期"]);
+  for(const f of FIELDS) if(!(f in r)) r[f] = "";
+  if(!r.__id) r.__id = uuid();
+  r.__key = makeKey(r);
+  const idx = records.findIndex(x => (x.__key || makeKey(x)) === r.__key);
+  if(idx>=0){
+    r.__id = records[idx].__id || r.__id;
+    records[idx] = r;
+    return {mode:"update"};
+  }else{
+    records.push(r);
+    return {mode:"insert"};
+  }
+}
+
+function startEdit(recId){
+  const r = records.find(x => x.__id === recId);
+  if(!r) return;
+  editingId = recId;
+  $("btnDelete").disabled = false;
+  $("editStatus").textContent = "目前模式：編輯（同主鍵儲存會更新）";
+  $("f_visit_date").value = normalizeDate(r["拜訪日期"]);
+  $("f_sales").value = r["業務"]||"";
+  $("f_customer_type").value = r["客戶別"]||"";
+  $("f_customer_name").value = r["客戶名"]||"";
+  $("f_region").value = r["區域"]||"";
+  $("f_contact").value = r["接洽人"]||"";
+  $("f_dept").value = r["部門"]||"";
+  $("f_industry").value = r["產業別"]||"";
+  $("f_supply_chain").value = r["上下游廠商"]||"";
+  $("f_surface").value = r["現有表面處理"]||"";
+  $("f_current_vendor").value = r["現有廠商"]||"";
+  $("f_in_mass").value = r["目前是否在九井量產"]||"";
+  $("f_mass_qty").value = r["量產品預估量/月"]||"";
+  $("f_visit_notes").value = r["拜訪內容紀錄"]||"";
+  $("f_has_sample").value = r["是否有新樣品試作"]||"";
+  $("f_sample_name").value = r["樣品品名"]||"";
+  $("f_sample_material").value = r["樣品材質"]||"";
+  $("f_hardness").value = r["硬度"]||"";
+  $("f_compound").value = r["化合層"]||"";
+  $("f_est_qty").value = r["預估數量/月"]||"";
+  $("f_est_order_time").value = r["預估何時會下單"]||"";
+  $("f_satisfaction").value = r["品質/服務是否滿意"]||"";
+  $("f_follow_notes").value = r["追蹤紀錄"]||"";
+  setStatus();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function deleteCurrent(){
+  if(!editingId) return;
+  const idx = records.findIndex(x => x.__id === editingId);
+  if(idx<0) return;
+  if(!confirm("確定要刪除此筆？")) return;
+  records.splice(idx,1);
+  save(); clearForm(); render();
+}
+
+function getFilters(){
+  return {
+    ds: $("qDateStart").value ? normalizeDate($("qDateStart").value) : "",
+    de: $("qDateEnd").value ? normalizeDate($("qDateEnd").value) : "",
+    sales: $("qSales").value.trim(),
+    cust: $("qCustomer").value.trim(),
+    region: $("qRegion").value.trim(),
+    any: $("qAny").value.trim()
+  };
+}
+
+function match(r, f){
+  const d = normalizeDate(r["拜訪日期"]);
+  if(f.ds && d && d < f.ds) return false;
+  if(f.de && d && d > f.de) return false;
+  if(f.sales && String(r["業務"]||"").toLowerCase().indexOf(f.sales.toLowerCase()) === -1) return false;
+  if(f.cust && String(r["客戶名"]||"").toLowerCase().indexOf(f.cust.toLowerCase()) === -1) return false;
+  if(f.region && String(r["區域"]||"").toLowerCase().indexOf(f.region.toLowerCase()) === -1) return false;
+  if(f.any){
+    const blob = FIELDS.map(k=>String(r[k]||"")).join(" ").toLowerCase();
+    if(blob.indexOf(f.any.toLowerCase()) === -1) return false;
+  }
+  return true;
+}
+
+function render(){
+  $("countAll").textContent = records.length;
+  const f = getFilters();
+  const filtered = records.filter(r => match(r, f));
+  $("countFiltered").textContent = filtered.length;
+
+  // 分頁：每頁顯示 20 筆（可改 pageSize）
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  if(currentPage > totalPages) currentPage = totalPages;
+  if(currentPage < 1) currentPage = 1;
+  const startIdx = (currentPage - 1) * pageSize;
+  const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+
+  const pageNowEl = $("pageNow"); const pageTotalEl = $("pageTotal");
+  if(pageNowEl && pageTotalEl){ pageNowEl.textContent = String(currentPage); pageTotalEl.textContent = String(totalPages); }
+
+  const tb = $("tbody");
+  tb.innerHTML = "";
+  for(const r of pageItems){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="nowrap"><div class="right"><button class="secondary" data-act="edit" data-id="${r.__id}">編輯</button></div></td>
+      <td class="nowrap">${esc(normalizeDate(r["拜訪日期"]))}</td>
+      <td class="nowrap">${esc(r["業務"]||"")}</td>
+      <td>${esc(r["客戶名"]||"")}</td>
+      <td class="nowrap">${esc(r["區域"]||"")}</td>
+      <td class="nowrap">${esc(r["客戶別"]||"")}</td>
+      <td>${esc(r["接洽人"]||"")}</td>
+      <td>${esc(r["產業別"]||"")}</td>
+      <td class="nowrap">${esc(r["目前是否在九井量產"]||"")}</td>
+      <td>${esc(r["量產品預估量/月"]||"")}</td>
+      <td class="nowrap">${esc(r["是否有新樣品試作"]||"")}</td>
+      <td>${esc(r["預估何時會下單"]||"")}</td>
+      <td class="nowrap">${esc(r["品質/服務是否滿意"]||"")}</td>
+      <td>${esc(r["拜訪內容紀錄"]||"").replaceAll("\n","<br>")}</td>
+      <td>${esc(r["追蹤紀錄"]||"").replaceAll("\n","<br>")}</td>
+    `;
+    tb.appendChild(tr);
+  }
+  tb.querySelectorAll("button[data-act='edit']").forEach(b=>b.addEventListener("click", ()=>startEdit(b.dataset.id)));
+}
+
+function toCSV(recs){
+  const bom = "\uFEFF";
+  const rows = [];
+  rows.push(FIELDS.join(","));
+  for(const r of recs){
+    const vals = FIELDS.map(k=>{
+      const v = String(r[k] ?? "");
+      const vv = v.replaceAll('"','""');
+      if(/[",\n\r]/.test(vv)) return `"${vv}"`;
+      return vv;
+    });
+    rows.push(vals.join(","));
+  }
+  return bom + rows.join("\r\n");
+}
+
+function download(filename, text){
+  const blob = new Blob([text], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function parseCSV(text){
+  const rows = [];
+  let i=0, field="", row=[], inQuotes=false;
+  while(i < text.length){
+    const ch = text[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(text[i+1] === '"'){ field+='"'; i+=2; continue; }
+        inQuotes=false; i++; continue;
+      }else{ field += ch; i++; continue; }
+    }else{
+      if(ch === '"'){ inQuotes=true; i++; continue; }
+      if(ch === ','){ row.push(field); field=""; i++; continue; }
+      if(ch === '\r'){
+        if(text[i+1] === '\n'){ row.push(field); rows.push(row); row=[]; field=""; i+=2; continue; }
+        row.push(field); rows.push(row); row=[]; field=""; i++; continue;
+      }
+      if(ch === '\n'){ row.push(field); rows.push(row); row=[]; field=""; i++; continue; }
+      field += ch; i++; continue;
+    }
+  }
+  row.push(field); rows.push(row);
+  while(rows.length && rows[rows.length-1].every(x=>String(x??"").trim()==="")) rows.pop();
+  return rows;
+}
+
+async function handleImport(file){
+  const text = await file.text();
+  const rows = parseCSV(text.replace(/^\uFEFF/, ""));
+  if(rows.length < 2){ setStatus("", "CSV 內容不足"); return; }
+  const header = rows[0].map(x=>String(x).trim());
+  const idxMap = {};
+  for(const f of FIELDS){ idxMap[f] = header.indexOf(f); }
+  const missing = FIELDS.filter(f=>idxMap[f] < 0);
+  if(missing.length){ setStatus("", "CSV 缺少欄位：" + missing.join("、")); return; }
+  let ins=0, upd=0;
+  for(let r=1; r<rows.length; r++){
+    const line = rows[r];
+    const obj = {};
+    for(const f of FIELDS){ obj[f] = line[idxMap[f]] ?? ""; }
+    const res = upsertRecord(obj);
+    if(res.mode==="insert") ins++; else upd++;
+  }
+  save(); currentPage = 1; render();
+  setStatus(`匯入完成：新增 ${ins}、更新 ${upd}`, "");
+}
+
+function clearFilters(){
+  ["qDateStart","qDateEnd","qSales","qCustomer","qRegion","qAny"].forEach(id=>$(id).value="");
+  currentPage = 1;
+  render();
+}
+
+const SAMPLE = [{"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "柏科立", "區域": "台中大雅", "接洽人": "Mr. 陳", "部門": "", "產業別": "設備製造", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "之前模具是做半導體的機台，現在停產了，所以沒有要再作氮化的產品。現場都是鋁件，作陽級處理，裝在電子機臺上。唯一鐵件是大齒輪，做高週波。如有要做氮化會連絡我司。", "是否有新樣品試作": "是", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "兆陵", "區域": "台中大雅", "接洽人": "Ms. 胡", "部門": "", "產業別": "金屬手工具", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "胡小姐外出送貨、因此電訪。\n樣品前陣子剛組裝，裝在攻牙機上還不知道結果，要再追蹤。", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "雅聖精密", "區域": "台中豐原", "接洽人": "Ms. 蔡", "部門": "", "產業別": "模具、金屬加工", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "樣品心軸測試中、待追蹤。\n公司做CNC加工，有單才會做，大部份依圖製作，電鍍、\n熱處理都有，蔡's知道氮化的優點（做完不用再精加工），因為之前有接觸過氮化，有需求都會跟老闆建議。\n後續有模具會請我司測試.但模具量不大。", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "澧元", "區域": "台中神岡", "接洽人": "Mr. 許", "部門": "", "產業別": "金屬相關製造業", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "支架用在運動器村上，有要求心部硬度，目前客戶還在測試中。", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "松讚", "區域": "台中豐原", "接洽人": "Ms. 林經理", "部門": "", "產業別": "自行車及其零件", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "客戶端樣品有設變，後續還有樣品會給我司測試，目前正在加工中。\n屬CNC加工廠，汽機車、自行車零件比較多，也有做BMW的零件。\n現場八成都是鋁件，做陽及處理，鐵件較少，交通類別的生意有回溫。\n如要開發要找業務馮副理，品管吳經理。剛好在開會，要另外約時閒。", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "誠鋒", "區域": "台中豐原", "接洽人": "Mr. 張", "部門": "採購", "產業別": "鞋業機械", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "公司在組裝賣機台的.新機台還沒組裝完成，還在等其它零件回來，所以還沒測試.（氣壓油缸）。\n機械業景氣很差，跟去年相比少了30~40％，要等過年後再看看。", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "睿陽", "區域": "台中神岡", "接洽人": "Ms. 林", "部門": "", "產業別": "機械加工", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "林剛好外出。", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "新維", "區域": "台中北屯", "接洽人": "", "部門": "", "產業別": "", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}, {"拜訪日期": "1/9", "業務": "柏鈞", "客戶別": "樣品客戶", "客戶名": "瀚智", "區域": "台中神岡", "接洽人": "", "部門": "", "產業別": "", "上下游廠商": "", "現有表面處理": "", "現有廠商": "", "目前是否在九井量產": "", "量產品預估量/月": "", "拜訪內容紀錄": "", "是否有新樣品試作": "", "樣品品名": "", "樣品材質": "", "硬度": "", "化合層": "", "預估數量/月": "", "預估何時會下單": "", "品質/服務是否滿意": "", "追蹤紀錄": ""}];
+
+function loadSample(){
+  if(records.length && !confirm("目前已有資料，仍要載入示例（會以主鍵更新/新增）？")) return;
+  let ins=0, upd=0;
+  for(const r of SAMPLE){
+    const res = upsertRecord({...r});
+    if(res.mode==="insert") ins++; else upd++;
+  }
+  save(); render();
+  setStatus(`已載入示例：新增 ${ins}、更新 ${upd}`, "");
+}
+
+function init(){
+  load();
+  const psl = $("pageSizeLabel"); if(psl) psl.textContent = String(pageSize);
+  render();
+  $("btnSave").addEventListener("click", ()=>{
+    const r = formToRecord();
+    const err = validateRecord(r);
+    if(err){ setStatus("", err); return; }
+    const res = upsertRecord(r);
+    save(); render();
+    setStatus(res.mode==="insert" ? "已新增完成" : "已更新完成", "");
+  });
+  $("btnNew").addEventListener("click", clearForm);
+  $("btnDelete").addEventListener("click", deleteCurrent);
+
+  $("btnExportNew").addEventListener("click", ()=>{
+    const csv = toCSV(records);
+    const d = new Date(); const pad=n=>String(n).padStart(2,"0");
+    download(`客戶拜訪追蹤_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.csv`, csv);
+  });
+
+  $("btnExportOverwrite").addEventListener("click", ()=>{
+    if(!lastImportFilename){ setStatus("", "尚未匯入 CSV，無法使用覆蓋原檔名匯出"); return; }
+    const csv = toCSV(records);
+    // 瀏覽器安全限制無法真正覆寫磁碟原檔，這裡用「同檔名」下載，讓你選擇覆蓋即可
+    download(lastImportFilename, csv);
+  });
+
+  $("btnImport").addEventListener("click", ()=> $("fileImport").click());
+  $("fileImport").addEventListener("change", async (e)=>{
+    const file = e.target.files?.[0]; if(!file) return;
+    lastImportFilename = file.name || "";
+    const nameEl = $("lastImportName"); if(nameEl) nameEl.textContent = lastImportFilename || "（尚未匯入）";
+    const btnOv = $("btnExportOverwrite"); if(btnOv) btnOv.disabled = !lastImportFilename;
+    await handleImport(file); e.target.value="";
+  });
+
+  ["qDateStart","qDateEnd","qSales","qCustomer","qRegion","qAny"].forEach(id=>{
+    $(id).addEventListener("input", ()=>{ currentPage = 1; render(); });
+    $(id).addEventListener("change", ()=>{ currentPage = 1; render(); });
+  });
+
+  $("btnClearFilter").addEventListener("click", clearFilters);
+
+  // 分頁控制
+  const prev = $("btnPrevPage"), next = $("btnNextPage");
+  if(prev) prev.addEventListener("click", ()=>{
+    currentPage = Math.max(1, currentPage - 1);
+    render();
+  });
+  if(next) next.addEventListener("click", ()=>{
+    const f = getFilters();
+    const filtered = records.filter(r => match(r, f));
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    currentPage = Math.min(totalPages, currentPage + 1);
+    render();
+  });
+  $("btnClearAll").addEventListener("click", ()=>{
+    if(!confirm("確定要清空所有資料？（本機資料會全部刪除）")) return;
+    records=[]; save(); clearForm(); render(); setStatus("已清空所有資料","");
+  });
+  $("btnLoadSample").addEventListener("click", loadSample);
+
+  clearForm();
+}
+init();
+</script>
+</body>
+</html>
